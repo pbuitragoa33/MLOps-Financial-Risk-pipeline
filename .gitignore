@@ -14,3 +14,6 @@ Thumbs.db
 
 #Env
 .env
+
+#pdf
+.pdf

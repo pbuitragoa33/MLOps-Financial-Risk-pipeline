@@ -524,13 +524,13 @@ categorical_features = ['plazo_prestamo', 'tipo_credito', 'tipo_laboral']
 
 
 pipeline_basemodel = Pipeline(steps = [
-    ("eliminar_nulos", ColumnasNulos(cols_to_drop = variables_nulidad)),
-    ("imputacion", Imputacion(strategy = 'knn')),
+    ("eliminar_categorias", EliminarCategorias(target_col = "tipo_credito", cats_to_drop = ["6", "7", "68"])),
     ("outliers", Outliers()),
     ("nuevas_variables", NuevasVariables()),
-    ("to_category", ToCategory(cols = variables_categoricas)),
     ("columnas_irrelevantes", ColumnasIrrelevantes(cols_to_drop = variables_irrelevantes)),
-    ("eliminar_categorias", EliminarCategorias(target_col = "tipo_credito", cats_to_drop = ["6", "7", "68"]))
+    ("eliminar_nulos", ColumnasNulos(cols_to_drop = variables_nulidad)),
+    ("to_category", ToCategory(cols = variables_categoricas)),
+    ("imputacion", Imputacion(strategy = 'knn'))
 ])
 
 

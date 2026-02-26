@@ -5,6 +5,9 @@
 
 import pandas as pd
 import numpy as np
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.pipeline import Pipeline
@@ -300,7 +303,7 @@ class Outliers(BaseEstimator, TransformerMixin):
 
         # Casos Particulares (edad, puntaje_datacrefido, ...)
 
-        X = X[X["_cliente"] <= 100]
+        X = X[X["edad_cliente"] <= 100]
         X = X[X["puntaje_datacredito"].between(150, 950)]
 
         return X
@@ -334,9 +337,9 @@ class NuevasVariables(BaseEstimator, TransformerMixin):
         # Casos Particulares
 
         X['plazo_prestamo'] = pd.cut(X['plazo_meses'], bins = [0, 6, 18, 120], labels = ['corto_plazo', 'mediano_plazo', 'largo_plazo'], include_lowest = True)
-        X['apalancamiento'] = (X['capital_prestado'] + X['total_otros_prestamos']) / X['salario_cliente']
-        X['exposicion_por_punto'] = X['capital_prestado'] / X['puntaje_datacredito']
-        X['intensidad_credito'] = X['cant_creditosvigentes'] / X['edad_cliente']
+        X['apalancamiento'] = ((X['capital_prestado'] + X['total_otros_prestamos']) / X['salario_cliente'].replace(0, np.nan))
+        X['exposicion_por_punto'] = (X['capital_prestado'] / X['puntaje_datacredito']).replace(0, np.nan)
+        X['intensidad_credito'] = (X['cant_creditosvigentes'] / X['edad_cliente'].replace(0, np.nan))
 
         return X
 
@@ -444,10 +447,68 @@ class EliminarCategorias(BaseEstimator, TransformerMixin):
         """
 
         return X[~X[self.target_col].isin(self.cats_to_drop)].copy()
+    
 
 
+# ---------------------------------------------------------- 9. Clase AgruparCategorias ----------------------------------------------------------
 
-# ---------------------------------------------------------- 9. Clase AgregarTarget ----------------------------------------------------------
+
+# Esta clase se encarga de reagrupar categorías de una variable categórica
+
+class AgruparCategorias(BaseEstimator, TransformerMixin):
+
+    def __init__(self, target_col, cats_to_group, new_value = "otros"):
+
+        """
+
+        target_col: columna donde se agruparán categorías
+        cats_to_group: lista de valores a agrupar
+        new_value: nombre de la nueva categoría
+        """
+
+        self.target_col = target_col
+        self.cats_to_group = [str(c) for c in cats_to_group]
+        self.new_value = str(new_value)
+
+    def fit(self, X, y = None):
+
+        """
+        Método fit: no hace nada, solo devuelve self.
+        """
+
+        return self
+
+    def transform(self, X):
+
+        """
+        Método transform: reagrupa las clases a otra categoría.
+        """
+
+        X = X.copy()
+
+        if self.target_col not in X.columns:
+
+            return X
+
+        # Formateo de datos con regex
+
+        X[self.target_col] = (
+            X[self.target_col].astype(str).str.replace(r'\.0$', '', regex = True).str.strip()
+        )
+
+        # Agrupación
+
+        X[self.target_col] = X[self.target_col].apply(lambda x: self.new_value if x in self.cats_to_group else x)
+
+        # Cambiar a tipo category
+        
+        X[self.target_col] = X[self.target_col].astype("category")
+
+        return X
+    
+
+
+# ---------------------------------------------------------- 10. Clase AgregarTarget ----------------------------------------------------------
 
 
 # Esta clase elimina filas con categorías específicasen una columnas.
@@ -524,12 +585,12 @@ categorical_features = ['plazo_prestamo', 'tipo_credito', 'tipo_laboral']
 
 
 pipeline_basemodel = Pipeline(steps = [
-    ("eliminar_categorias", EliminarCategorias(target_col = "tipo_credito", cats_to_drop = ["6", "7", "68"])),
+    ("agrupar_categorias", AgruparCategorias(target_col = "tipo_credito", cats_to_group = [6, 7, 10, 68], new_value = "otros")),
     ("outliers", Outliers()),
     ("nuevas_variables", NuevasVariables()),
     ("columnas_irrelevantes", ColumnasIrrelevantes(cols_to_drop = variables_irrelevantes)),
-    ("eliminar_nulos", ColumnasNulos(cols_to_drop = variables_nulidad)),
     ("to_category", ToCategory(cols = variables_categoricas)),
+    ("eliminar_nulos", ColumnasNulos(cols_to_drop = variables_nulidad)),
     ("imputacion", Imputacion(strategy = 'knn'))
 ])
 
@@ -555,3 +616,42 @@ pipeline_ml = Pipeline(steps = [
 #    ("agregar_target", AgregarTarget(target_col = "Pago_atiempo"))
     ]
 )
+
+
+
+# ---------------------------------------------------------- Ejecución del Pipeline ----------------------------------------------------------
+
+
+# Función main
+
+def main():
+
+    print("Feature Engineering en proceso...")
+
+    # Varibale de entorno
+
+    load_dotenv()
+
+    # Ruta del archivo
+
+    pth = Path(os.getenv("DATA_FILE"))
+
+    # Leer la base de datos
+
+    df = pd.read_excel(pth / "BD_creditos.xlsx")
+
+    # Ejecutar el pipeline
+
+    df_procesado = pipeline_ml.fit_transform(df)
+
+    # Guardar el nuevo dataset procesado
+
+    df_procesado.to_excel(pth / "BD_creditos_procesado.xlsx", index = False)
+
+    print("Feature Engineering finalizado")
+
+
+
+if __name__ == "__main__":
+
+    main()

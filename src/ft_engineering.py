@@ -515,38 +515,37 @@ class AgruparCategorias(BaseEstimator, TransformerMixin):
 
 class AgregarTarget(BaseEstimator, TransformerMixin):
 
-    # Constructor de la clase --> recibe el nombre de la columna objetivo.
+    # Constructor de la clase
 
-    def __init__(self, target_col = "column"):
-
-        # Guardar el nombre de la columna objetivo.
+    def __init__(self, target_col = "target"):
 
         self.target_col = target_col
-        self._y = None
+        self.y_stored = None
 
     def fit(self, X, y = None):
 
         """
-        Método fit: almacena la variable objetivo y devuelve self.
+        Método fit: Almacenar el traget como pd.Serie vincula al ondice y retornar self.
         """
 
-        self._y = pd.Series(y, index = getattr(X, "index", None), name = self.target_col) if y is not None else None
-        
+        if y is not None:
+
+            self.y_stored = pd.Series(y, index = X.index)
+
         return self
 
     def transform(self, X):
 
         """
-        Método transform: agrega la variable objetivo al DataFrame X y devuelve el DataFrame resultante. Si no se ha almacenado una variable objetivo, devuelve X sin cambios.
+        Método transform: Alinear el target con als filas rpesentes en X.
         """
 
-        if self._y is None:
+        if self.y_stored is None:
 
             return X
         
         X = X.copy()
-
-        X[self.target_col] = self._y.reindex(X.index)
+        X[self.target_col] = self.y_stored.reindex(X.index)
 
         return X
     
@@ -559,7 +558,7 @@ class AgregarTarget(BaseEstimator, TransformerMixin):
 
 variables_irrelevantes = ['fecha_prestamo', 'creditos_sectorCooperativo', 'creditos_sectorReal', 
                         'creditos_sectorFinanciero', 'saldo_principal', 'saldo_mora_codeudor', 
-                        'puntaje', 'cuota_pactada']
+                        'puntaje', 'cuota_pactada', 'exposicion_por_punto']
 
 
 # 2. Variables con Muchos Nulos
@@ -576,7 +575,7 @@ variables_categoricas = ['tipo_credito', 'tipo_laboral', 'Pago_atiempo']
 
 numeric_features = ['capital_prestado', 'edad_cliente', 'salario_cliente', 'total_otros_prestamos', 'puntaje_datacredito',
                     'cant_creditosvigentes', 'huella_consulta', 'saldo_mora', 'saldo_total', 'apalancamiento', 
-                    'exposicion_por_punto', 'intensidad_credito']
+                    'intensidad_credito']
 
 categorical_features = ['plazo_prestamo', 'tipo_credito', 'tipo_laboral']
 
@@ -613,7 +612,7 @@ preprocessor = ColumnTransformer(
 pipeline_ml = Pipeline(steps = [
     ("basemodel", pipeline_basemodel),
     ("preprocessor", ToDF(numeric_features = numeric_features, categorical_features = categorical_features)),
-#    ("agregar_target", AgregarTarget(target_col = "Pago_atiempo"))
+    ("agregar_target", AgregarTarget(target_col = "Pago_atiempo"))
     ]
 )
 
@@ -640,9 +639,16 @@ def main():
 
     df = pd.read_excel(pth / "BD_creditos.xlsx")
 
+    # Separación de X y y
+
+    target_name = "Pago_atiempo"
+
+    X = df.drop(columns = [target_name])
+    y = df[target_name]
+
     # Ejecutar el pipeline
 
-    df_procesado = pipeline_ml.fit_transform(df)
+    df_procesado = pipeline_ml.fit_transform(X, y)
 
     # Guardar el nuevo dataset procesado
 

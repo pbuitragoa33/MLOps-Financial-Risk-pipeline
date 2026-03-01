@@ -20,6 +20,10 @@ from sklearn.metrics import (accuracy_score, precision_score,
     )
 
 
+load_dotenv() 
+
+pth_outputs = Path(os.getenv("OUTPUTS"))
+
 
 # ----------------------------------------------------- Clase del Modelo Heurístico -----------------------------------------------------
 
@@ -33,21 +37,19 @@ class ModeloHeuristico(BaseEstimator, ClassifierMixin):
     - huella_consulta > 10 : Aumenta Riesgo
     - edad_cliente < 30 : Aunmenta Riesgo
     - saldo_total > 800000,0 : Mitiga riesgo
-    - exposicion_por_punto > 2.85 : Aumenta riesgo 
 
     """
 
     # Constructor de la clase que hereda de BaseEstimator y ClassifierMixin
 
     def __init__(self, puntaje_datacredito_THRESHOLD: int = 800, huella_consulta_THRESHOLD: int = 10, 
-                 edad_cliente_THRESHOLD: int = 30, saldo_total_THRESHOLD: float = 800000.0, 
-                 exposicion_por_punto_THRESHOLD: float = 2.85, target_positivo: str = 1, target_negativo: str = 0):
+                 edad_cliente_THRESHOLD: int = 30, saldo_total_THRESHOLD: float = 800000.0,
+                 target_positivo: str = 1, target_negativo: str = 0):
         
         self.puntaje_datacredito_THRESHOLD = puntaje_datacredito_THRESHOLD
         self.huella_consulta_THRESHOLD = huella_consulta_THRESHOLD
         self.edad_cliente_THRESHOLD = edad_cliente_THRESHOLD
         self.saldo_total_THRESHOLD = saldo_total_THRESHOLD
-        self.exposicion_por_punto_THRESHOLD = exposicion_por_punto_THRESHOLD
         self.target_positivo = target_positivo
         self.target_negativo = target_negativo
 
@@ -74,37 +76,41 @@ class ModeloHeuristico(BaseEstimator, ClassifierMixin):
 
         """
         Métodos de predicción, aplicando las reglas de clasificación.
+        Ahora será clase positiva si cumple 3 o más de las 4 validaciones.
+
         """
 
         predicciones = []
 
         for _, row in X.iterrows():
 
-            if row['puntaje_datacredito'] < self.puntaje_datacredito_THRESHOLD:
+            validaciones = 0
 
-                predicciones.append(self.target_negativo)
+            if row['puntaje_datacredito'] >= self.puntaje_datacredito_THRESHOLD:
 
-            elif row['huella_consulta'] > self.huella_consulta_THRESHOLD:
+                validaciones += 1
 
-                predicciones.append(self.target_negativo)
+            if row['huella_consulta'] <= self.huella_consulta_THRESHOLD:
 
-            elif row['edad_cliente'] < self.edad_cliente_THRESHOLD:
+                validaciones += 1
 
-                predicciones.append(self.target_negativo)
+            if row['edad_cliente'] >= self.edad_cliente_THRESHOLD:
 
-            elif row['saldo_total'] < self.saldo_total_THRESHOLD:
+                validaciones += 1
 
-                predicciones.append(self.target_negativo)
+            if row['saldo_total'] >= self.saldo_total_THRESHOLD:
 
-            elif row['exposicion_por_punto'] > self.exposicion_por_punto_THRESHOLD:
+                validaciones += 1
 
-                predicciones.append(self.target_negativo)
-
-            else:
+            if validaciones >= 3:
 
                 predicciones.append(self.target_positivo)
 
-        return np.array(predicciones)   
+            else:
+
+                predicciones.append(self.target_negativo)
+
+        return np.array(predicciones) 
 
 
 
@@ -178,7 +184,7 @@ def curvas_aprendizaje_model(estimator, X, y, scoring = "accuracy"):
     ax.set_ylabel(scoring.capitalize(), fontsize = 14)
     ax.legend(loc = "best")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(pth_outputs / "heuristic_learning_curves_2.png", dpi = 300, bbox_inches = "tight")
 
     # Gráfica de Tiempos de Entrenamiento y Evaluación
 
@@ -196,7 +202,8 @@ def curvas_aprendizaje_model(estimator, X, y, scoring = "accuracy"):
     ax[1].set_ylabel("Time (seconds)", fontsize = 14)
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(pth_outputs / "heuristic_score_times_2.png", dpi = 300, bbox_inches = "tight")
+
 
 
 
@@ -232,6 +239,17 @@ def entrenar_modelo_heuristico(path : str, target_column : str = "Pago_atiempo",
     print("Reporte de Clasificación del Modelo Heurístico:")
     print(classification_report(y_test, y_pred))
 
+    # Métricas de clasificación
+
+    accuracy_heuristico = accuracy_score(y_test, y_pred)
+    precision_heuristico = precision_score(y_test, y_pred)
+    f1_heuristico = f1_score(y_test, y_pred)
+
+    print(f"Accuracy en Test:{round(accuracy_heuristico, 3)}")
+    print(f"Precision en Test:{round(precision_heuristico, 3)}")
+    print(f"F1 Score en Test:{round(f1_heuristico, 3)}")
+
+
 
     # Matriz de Confusión
 
@@ -239,7 +257,8 @@ def entrenar_modelo_heuristico(path : str, target_column : str = "Pago_atiempo",
                                              display_labels = modelo_heuristico.classes_, cmap = "Blues")
     plt.title("Matriz de Confusión del Modelo Heurístico", fontsize = 16)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(pth_outputs / "heuristic_confusion_matrix_2.png", dpi = 300, bbox_inches = "tight")
+
 
     # Cross Validation
 
@@ -272,4 +291,4 @@ if __name__ == "__main__":
 
     pth = Path(os.getenv("DATA_FILE"))
 
-    resultados = entrenar_modelo_heuristico(pth / "BD_creditos.xlsx", target_column = "Pago_atiempo", test_size = 0.2, random_state = 42)
+    resultados = entrenar_modelo_heuristico(pth / "BD_creditos.xlsx", target_column = "Pago_atiempo", test_size = 0.3, random_state = 42)

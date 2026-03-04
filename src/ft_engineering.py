@@ -6,6 +6,7 @@
 import pandas as pd
 import numpy as np
 import os
+import pickle
 from dotenv import load_dotenv
 from pathlib import Path
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -634,6 +635,9 @@ def main():
     # Ruta del archivo
 
     pth = Path(os.getenv("DATA_FILE"))
+    pipeline_pickle = Path(os.getenv("ARTIFACTS"))
+
+    pipeline_pickle.mkdir(parents = True, exist_ok = True)
 
     # Leer la base de datos
 
@@ -649,6 +653,12 @@ def main():
     # Ejecutar el pipeline
 
     df_procesado = pipeline_ml.fit_transform(X, y)
+
+    # Guardar el pipeline para producción
+
+    with open(pipeline_pickle / "pipeline_ml.pkl", "wb") as f:
+
+        pickle.dump(pipeline_ml, f)
 
     # Guardar el nuevo dataset procesado
 

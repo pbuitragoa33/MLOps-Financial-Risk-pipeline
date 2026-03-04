@@ -1,0 +1,7 @@
+organization=pbuitragoa33
+projectKey=pbuitragoa33_MLOps-Financial-Risk-pipeline
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.82398
+dashboardUrl=https://sonarcloud.io/dashboard?id=pbuitragoa33_MLOps-Financial-Risk-pipeline
+ceTaskId=AZy53Scm12OdiSQnmymI
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZy53Scm12OdiSQnmymI

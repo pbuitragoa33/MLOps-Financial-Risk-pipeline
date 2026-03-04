@@ -1,0 +1,152 @@
+
+#ft_engineering.Imputacion.transform}
+qC:\Users\ADMIN\Desktop\U\Semestre 7\Ciencia de Datos en Producci√≥n\Financial_Risk_pipeline\src\ft_engineering.pyÑ Ñ("2*˜
+
+2
+Ü à(=;
+
+ä ä(
+%1*!
+
+__unknown_file (
+
+X2copy=
+;
+
+ä ä(
+X"__id*"
+
+__unknown_file (
+
+%1`
+^
+
+å å(
+%2"__id*D
+
+__unknown_file ((*&
+ft_engineering.Imputacion"
+cols_rp
+
+å å(
+%3"__mapGet*!
+
+__unknown_file (
+
+X*"
+
+__unknown_file (
+
+%22__getitem__C
+A
+
+å å(	
+X_trans"__id*"
+
+__unknown_file (
+
+%3c
+a
+
+é é(
+%4"__id*G
+
+__unknown_file (+*)
+ft_engineering.Imputacion"
+
+imputer_lj
+
+é é(2
+%5*"
+
+__unknown_file (
+
+%4*'
+
+__unknown_file (
+	
+X_trans2	transformC
+A
+
+é é(2	
+imputed"__id*"
+
+__unknown_file (
+
+%5P
+N
+
+ê7 ê(F
+%6"__id*4
+
+__unknown_file (*
+	
+X_trans"	
+columnsN
+L
+
+êP ê(]
+%7"__id*2
+
+__unknown_file (*
+	
+X_trans"
+index£
+†
+
+ê ê(^
+%8"pandas.core.frame.DataFrame*"
+
+__unknown_file (
+
+pd*'
+
+__unknown_file (
+	
+imputed2
+columns
+
+%62
+index
+
+%7H
+F
+
+ê ê(^
+X_imputed_df"__id*"
+
+__unknown_file (
+
+%8a
+_
+
+í
+ í(
+%10"__id*D
+
+__unknown_file ((*&
+ft_engineering.Imputacion"
+cols_™ß
+
+í í($
+%9"dict.__setitem__*!
+
+__unknown_file (
+
+X*#
+
+__unknown_file (
+
+%10*,
+
+__unknown_file (
+
+X_imputed_df2__setitem__"
+
+ñ ñ(
+
+X:
+
+Ñ Ñ(
+XB
+ft_engineering.ImputacionH

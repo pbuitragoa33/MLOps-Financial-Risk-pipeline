@@ -21,7 +21,9 @@ import uvicorn
 # Creación de instancia de la API
 # ---------------------------------
 
-app = FastAPI(title = "API de Predicción de Pagos")
+app = FastAPI(title = "API de Predicción de Pagos", 
+              description = "API para predecir la probabilidad de impago de clientes " 
+              "usando Regresión Logística.")
 
 
 # ---------------------------------
@@ -31,12 +33,13 @@ app = FastAPI(title = "API de Predicción de Pagos")
 load_dotenv()
 
 
-objetos_pth = Path(os.getenv("OBJECTS"))
+objetos_pth = Path(os.getenv("ARTIFACTS"))
 
 try: 
 
-    pipeline = joblib.load(objetos_pth / "pipeline_ml.pkl")
-    modelo_LR = joblib.load(objetos_pth / "Logistic_Regression_final.pkl")
+    pipeline_modelo_LR = joblib.load(objetos_pth / "Logistic_Regression_final.pkl")
+    
+    print("Pipeline y modelo cargado exitosamente.")
 
 except Exception as e:
 
@@ -63,9 +66,7 @@ class InputData(BaseModel):
     huella_consulta: int
     saldo_mora: float
     saldo_total: float
-    apalancamiento: float
-    intensidad_credito: float
-    plazo_prestamo: int
+    plazo_meses: int
     tipo_credito: int
     tipo_laboral: str
 
@@ -96,34 +97,44 @@ def predict(data: InputData):
         "huella_consulta": [data.huella_consulta],
         "saldo_mora": [data.saldo_mora],
         "saldo_total": [data.saldo_total],
-        "apalancamiento": [data.apalancamiento],
-        "intensidad_credito": [data.intensidad_credito],
-        "plazo_prestamo": [data.plazo_prestamo],
+        "plazo_meses": [data.plazo_meses],
         "tipo_credito": [data.tipo_credito],
         "tipo_laboral": [data.tipo_laboral]
     })
 
     try:
 
-        # Ejecución de Pipeline
+        # Ejecución de Pipeline (incluye pipeline de procesamiento y el modelo para predecir)
 
-        X_procesado = pipeline.transform(df)
+        df = pd.DataFrame([data.model_dump()])
 
         # Predección
 
-        prediccion = modelo_LR.predict(X_procesado)
+        prediccion = pipeline_modelo_LR.predict(df)[0]
 
-        resultado = int(prediccion[0])
+        # Probabilidades para ambas clases
+
+        probabilidades = pipeline_modelo_LR.predict_proba(df)[0]
+        prob_impago = probabilidades[0] 
+        prob_pago = probabilidades[1]
 
         # Lógica de negocio
 
-        estado = "El cliente SI PAGA" if resultado > 0 else  "El cliente NO PAGA"
+        if prediccion == 0:
+
+            estado = "ALERTA: El cliente NO PAGARÁ (Moroso)"
+
+        else:
+
+            estado = "APROBADO: El cliente SÍ PAGARÁ"
 
         return {
-            "predicción": resultado,
-            "estado": estado
+            "prediccion_clase": int(prediccion),
+            "estado": estado,
+            "probabilidad_de_impago": f"{prob_impago * 100:.2f}%",
+            "probabilidad_de_pago": f"{prob_pago * 100:.2f}%"
         }
 
     except Exception as e:
 
-        raise HTTPException(status_code = 500, detail = str(e)) 
+        raise HTTPException(status_code=500, detail=f"Error procesando la predicción: {str(e)}")

@@ -304,8 +304,13 @@ class Outliers(BaseEstimator, TransformerMixin):
 
         # Casos Particulares (edad, puntaje_datacrefido, ...)
 
-        X = X[X["edad_cliente"] <= 100]
-        X = X[X["puntaje_datacredito"].between(150, 950)]
+        if "edad_cliente" in X.columns:
+
+            X["edad_cliente"] = X["edad_cliente"].clip(upper = 100)
+
+        if "puntaje_datacredito" in X.columns:
+
+            X["puntaje_datacredito"] = X["puntaje_datacredito"].clip(lower = 150, upper = 950)
 
         return X
     
@@ -427,14 +432,14 @@ class EliminarCategorias(BaseEstimator, TransformerMixin):
     # Constructor de la clase --> recibe el nombre de la columna objetivo y la lista de categorías a eliminar.  
 
     def __init__(self, target_col, cats_to_drop):
-
+        
         # Guardar el nombre de la columna objetivo y la lista de categorías a eliminar.
 
         self.target_col = target_col
         self.cats_to_drop = cats_to_drop
 
     def fit(self, X, y = None):
-        
+
         """
         Método fit: no hace nada, solo devuelve self.
         """
@@ -447,8 +452,13 @@ class EliminarCategorias(BaseEstimator, TransformerMixin):
         Método transform: elimina filas que contengan las categorías especificadas en cats_to_drop en la columna target_col y devuelve el DataFrame resultante.
         """
 
-        return X[~X[self.target_col].isin(self.cats_to_drop)].copy()
-    
+        X = X.copy()
+
+        if self.target_col in X.columns:
+
+            X.loc[X[self.target_col].isin(self.cats_to_drop), self.target_col] = np.nan
+
+        return X
 
 
 # ---------------------------------------------------------- 9. Clase AgruparCategorias ----------------------------------------------------------
@@ -461,15 +471,14 @@ class AgruparCategorias(BaseEstimator, TransformerMixin):
     def __init__(self, target_col, cats_to_group, new_value = "otros"):
 
         """
-
         target_col: columna donde se agruparán categorías
         cats_to_group: lista de valores a agrupar
         new_value: nombre de la nueva categoría
         """
 
         self.target_col = target_col
-        self.cats_to_group = [str(c) for c in cats_to_group]
-        self.new_value = str(new_value)
+        self.cats_to_group = cats_to_group
+        self.new_value = new_value
 
     def fit(self, X, y = None):
 
@@ -491,15 +500,20 @@ class AgruparCategorias(BaseEstimator, TransformerMixin):
 
             return X
 
+        categorias_a_agrupar = [str(c) for c in self.cats_to_group]
+        nuevo_valor_str = str(self.new_value)
+
         # Formateo de datos con regex
 
         X[self.target_col] = (
             X[self.target_col].astype(str).str.replace(r'\.0$', '', regex = True).str.strip()
         )
 
-        # Agrupación
+        # Agrupación usando las variables locales que ya son strings
 
-        X[self.target_col] = X[self.target_col].apply(lambda x: self.new_value if x in self.cats_to_group else x)
+        X[self.target_col] = X[self.target_col].apply(
+            lambda x: nuevo_valor_str if x in categorias_a_agrupar else x
+        )
 
         # Cambiar a tipo category
         
@@ -508,48 +522,6 @@ class AgruparCategorias(BaseEstimator, TransformerMixin):
         return X
     
 
-
-# ---------------------------------------------------------- 10. Clase AgregarTarget ----------------------------------------------------------
-
-
-# Esta clase elimina filas con categorías específicasen una columnas.
-
-class AgregarTarget(BaseEstimator, TransformerMixin):
-
-    # Constructor de la clase
-
-    def __init__(self, target_col = "target"):
-
-        self.target_col = target_col
-        self.y_stored = None
-
-    def fit(self, X, y = None):
-
-        """
-        Método fit: Almacenar el traget como pd.Serie vincula al ondice y retornar self.
-        """
-
-        if y is not None:
-
-            self.y_stored = pd.Series(y, index = X.index)
-
-        return self
-
-    def transform(self, X):
-
-        """
-        Método transform: Alinear el target con als filas rpesentes en X.
-        """
-
-        if self.y_stored is None:
-
-            return X
-        
-        X = X.copy()
-        X[self.target_col] = self.y_stored.reindex(X.index)
-
-        return X
-    
 
 
 # ---------------------------------------------------------- Definición de Varibles ----------------------------------------------------------
@@ -567,9 +539,9 @@ variables_irrelevantes = ['fecha_prestamo', 'creditos_sectorCooperativo', 'credi
 variables_nulidad = ['tendencia_ingresos', 'promedio_ingresos_datacredito']
 
 
-# 3. Variables que deben ser Categóricas
+# 3. Variables que deben ser Categóricas 
 
-variables_categoricas = ['tipo_credito', 'tipo_laboral', 'Pago_atiempo']
+variables_categoricas = ['tipo_credito', 'tipo_laboral']
 
 
 # 4. Numéricas y Categóricas
@@ -612,8 +584,7 @@ preprocessor = ColumnTransformer(
 
 pipeline_ml = Pipeline(steps = [
     ("basemodel", pipeline_basemodel),
-    ("preprocessor", ToDF(numeric_features = numeric_features, categorical_features = categorical_features)),
-    ("agregar_target", AgregarTarget(target_col = "Pago_atiempo"))
+    ("preprocessor", ToDF(numeric_features = numeric_features, categorical_features = categorical_features))
     ]
 )
 
@@ -634,7 +605,7 @@ def main():
 
     # Ruta del archivo
 
-    pth = Path(os.getenv("DATA_FILE"))
+    pth = Path(os.getenv("DATA_FOLDER"))
     pipeline_pickle = Path(os.getenv("ARTIFACTS"))
 
     pipeline_pickle.mkdir(parents = True, exist_ok = True)
@@ -643,6 +614,11 @@ def main():
 
     df = pd.read_excel(pth / "BD_creditos.xlsx")
 
+    # Eliminar manualmente outliers
+
+    df = df[df["edad_cliente"] <= 100]
+    df = df[df["puntaje_datacredito"].between(150, 950)]
+
     # Separación de X y y
 
     target_name = "Pago_atiempo"
@@ -650,23 +626,23 @@ def main():
     X = df.drop(columns = [target_name])
     y = df[target_name]
 
-    # Ejecutar el pipeline
+    # Guardar X y y crudos para luego hacer fit_transform
 
-    df_procesado = pipeline_ml.fit_transform(X, y)
+    X.to_csv(pth / "X_base.csv", index = False)
+    y.to_csv(pth / "y_base.csv", index = False)
 
-    # Guardar el pipeline para producción
+    # Guardar el pipeline para el entrenamiento y producción
 
     with open(pipeline_pickle / "pipeline_ml.pkl", "wb") as f:
 
         pickle.dump(pipeline_ml, f)
 
-    # Guardar el nuevo dataset procesado
-
-    df_procesado.to_excel(pth / "BD_creditos_procesado.xlsx", index = False)
 
     print("Feature Engineering finalizado")
 
 
+
+# Main
 
 if __name__ == "__main__":
 

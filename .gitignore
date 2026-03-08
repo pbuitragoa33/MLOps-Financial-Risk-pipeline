@@ -12,8 +12,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-#Env
+# Env
 .env
 
-#pdf
+# pdf
 .pdf
+
+
+

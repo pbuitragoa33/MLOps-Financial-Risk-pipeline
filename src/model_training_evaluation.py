@@ -2,6 +2,9 @@
 
 
 # Librerías 
+
+
+import __main__
 import os
 import pandas as pd
 import numpy as np
@@ -17,12 +20,14 @@ import pickle
 from tqdm import tqdm
 
 from sklearn.base import clone
+from sklearn.pipeline import Pipeline as SklearnPipeline
 from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline as ImblearnPipeline
 
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, roc_auc_score,
                              average_precision_score, f1_score, confusion_matrix, classification_report,
                              roc_curve, auc, precision_recall_curve, brier_score_loss, log_loss)
+
 from sklearn.model_selection import (cross_val_score, StratifiedKFold, learning_curve, train_test_split)
 from sklearn.calibration import calibration_curve
 
@@ -37,23 +42,71 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 warnings.filterwarnings("ignore")
 
 
+# Importar Clases de Preprocesamiento
+
+from ft_engineering import AgruparCategorias, ToDF, Outliers, ColumnasNulos, Imputacion, NuevasVariables, ToCategory, ColumnasIrrelevantes, EliminarCategorias
+
+
+__main__.AgruparCategorias = AgruparCategorias
+__main__.ToDF = ToDF
+__main__.Outliers = Outliers
+__main__.ColumnasNulos = ColumnasNulos
+__main__.Imputacion = Imputacion
+__main__.NuevasVariables = NuevasVariables
+__main__.ToCategory = ToCategory
+__main__.ColumnasIrrelevantes = ColumnasIrrelevantes
+__main__.EliminarCategorias = EliminarCategorias
+
+
 
 # -------------------------------------------------------------------------------------------------
-# 1. CONFIGURACIÓN GLOBAL Y FUNCIONES DE DIVISIÓN DE DATOS
+# 1. CONFIGURACIÓN GLOBAL Y CARGA DE ARTEFACTOS
 # -------------------------------------------------------------------------------------------------
+
+load_dotenv()
+
+ruta_artifacts = Path(os.getenv("ARTIFACTS"))
+
+
+# Cargar el pipeline de preprocesamiento
+
+with open(ruta_artifacts / "pipeline_ml.pkl", "rb") as f:
+
+    pipeline_ml = pickle.load(f)
+
+
+
+# Aplanar el pipeline recursivamente sin importar el tipo exacto de Pipeline.
+
+
+def _es_pipeline(estimador):
+
+    return hasattr(estimador, 'steps') and hasattr(estimador, 'fit') and isinstance(getattr(estimador, 'steps', None), list)
+
+def obtener_pasos_planos(pipeline):
+
+    pasos = []
+
+    for nombre, estimador in pipeline.steps:
+
+        if _es_pipeline(estimador):
+
+            pasos.extend(obtener_pasos_planos(estimador))
+
+        else:
+
+            pasos.append((nombre, estimador))
+
+    return pasos
+
+
+# Invocar la función
+
+pasos_preprocesamiento = obtener_pasos_planos(pipeline_ml)
 
 SMOTE_RATIO = 0.33
+TEST_SIZE = 0.2
 cv_strategy = StratifiedKFold(n_splits = 5, shuffle = True, random_state = 42)
-
-
-def data_division(data: pd.DataFrame, test_size: float, target_column: str  =  "Pago_atiempo"):
-
-    X  =  data.drop(columns = [target_column])
-    y  =  data[target_column]
-    X_train, X_test, y_train, y_test  =  train_test_split(X, y, test_size = test_size, random_state = 42, stratify = y)
-    
-    return X_train, X_test, y_train, y_test
-
 
 
 # ---------------------------------------- FUNCIONES DE TUNING SIN SMOTE ----------------------------------------------------
@@ -75,14 +128,16 @@ def logistic_regression_tuning_no_smote(trial, X_train, y_train, cv = cv_strateg
 
     model = LogisticRegression(solver = solver, penalty = penalty, C = C, class_weight = class_weight, l1_ratio = l1_ratio)
 
-    return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # Árbol de Decisión
 
 def decision_tree_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, metric = "f1_macro"):
      
-     model = DecisionTreeClassifier(
+    model = DecisionTreeClassifier(
         max_depth = trial.suggest_int("max_depth", 2, 7),
         min_samples_split = trial.suggest_int("min_samples_split", 10, 50),
         min_samples_leaf = trial.suggest_int("min_samples_leaf", 5, 20),
@@ -91,7 +146,9 @@ def decision_tree_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, met
         class_weight = trial.suggest_categorical("class_weight", ["balanced", None])
     )
      
-     return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+     
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # Random Forest
@@ -107,7 +164,9 @@ def random_forest_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, met
         class_weight = trial.suggest_categorical("class_weight", ["balanced", None])
     )
 
-    return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # LightGBM
@@ -124,7 +183,9 @@ def lightGBM_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, metric =
         random_state = 42, n_jobs = 1, verbosity = -1
     )
 
-    return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # SVM (Máquina de Soporte Vectorial)
@@ -133,9 +194,12 @@ def svm_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, metric = "f1_
 
     kernel = trial.suggest_categorical('kernel', ['linear', 'rbf', 'sigmoid'])
     gamma = trial.suggest_float('gamma', 1e-3, 1e-1, log = True)
+
     model = SVC(kernel = kernel, gamma = gamma)
 
-    return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # XGBoost
@@ -150,7 +214,9 @@ def xgboost_tuning_no_smote(trial, X_train, y_train, cv = cv_strategy, metric = 
         eval_metric = 'logloss', random_state = 42, n_jobs = 1
     )
 
-    return cross_val_score(model, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = SklearnPipeline(steps = [('preprocessor', pipeline_ml), ('model', model)])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 
@@ -171,18 +237,19 @@ def crossval_detailed_metrics(pipeline_estimator, X_train, y_train, cv = 5):
 
         if isinstance(X_train, pd.DataFrame):
 
-            X_tr, X_val  =  X_train.iloc[train_idx], X_train.iloc[val_idx]
-            y_tr, y_val  =  y_train.iloc[train_idx], y_train.iloc[val_idx]
+            X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
 
         else:
 
-            X_tr, X_val  =  X_train[train_idx], X_train[val_idx]
-            y_tr, y_val  =  y_train[train_idx], y_train[val_idx]
+            X_tr, X_val = X_train[train_idx], X_train[val_idx]
+            y_tr, y_val = y_train[train_idx], y_train[val_idx]
 
-        model_fold  =  clone(pipeline_estimator)
+        model_fold = clone(pipeline_estimator)
 
         model_fold.fit(X_tr, y_tr)
-        y_pred  =  model_fold.predict(X_val)
+
+        y_pred = model_fold.predict(X_val)
 
         fold_metricas  =  {
             'fold': fold + 1,
@@ -215,19 +282,20 @@ def crossval_detailed_metrics(pipeline_estimator, X_train, y_train, cv = 5):
 # Función de visualización --> Curvas de Aprendizaje, Escalabilidad y Gap de Rendimiento
 
 def plot_learning_curves(estimator, X, y, scoring = "f1_macro", model_name = "Model", save_path = None):
+
     print(f"\nGenerando curvas de aprendizaje para {model_name}...")
 
-    train_sizes, train_scores, test_scores, fit_times, score_times  =  learning_curve(
+    train_sizes, train_scores, test_scores, fit_times, score_times = learning_curve(
         estimator = estimator, X = X, y = y,
         train_sizes = np.linspace(0.1, 1.0, 5),
         cv = StratifiedKFold(n_splits = 5, shuffle = True, random_state = 42),
         n_jobs = 1, scoring = scoring, return_times = True
     )
 
-    train_mean, train_std  =  train_scores.mean(axis = 1), train_scores.std(axis = 1)
-    test_mean, test_std  =  test_scores.mean(axis = 1), test_scores.std(axis = 1)
-    fit_times_mean, fit_times_std  =  fit_times.mean(axis = 1), fit_times.std(axis = 1)
-    score_times_mean, score_times_std  =  score_times.mean(axis = 1), score_times.std(axis = 1)
+    train_mean, train_std = train_scores.mean(axis = 1), train_scores.std(axis = 1)
+    test_mean, test_std = test_scores.mean(axis = 1), test_scores.std(axis = 1)
+    fit_times_mean, fit_times_std = fit_times.mean(axis = 1), fit_times.std(axis = 1)
+    score_times_mean, score_times_std = score_times.mean(axis = 1), score_times.std(axis = 1)
 
     fig, axes  =  plt.subplots(2, 2, figsize = (15, 10))
     fig.suptitle(f'Análisis de Curvas de Aprendizaje - {model_name}', fontsize = 16)
@@ -268,7 +336,7 @@ def plot_learning_curves(estimator, X, y, scoring = "f1_macro", model_name = "Mo
 
     # 4. Gap (Overfitting)
 
-    gap  =  train_mean - test_mean
+    gap = train_mean - test_mean
     axes[1, 1].plot(train_sizes, gap, "o-", color = 'darkviolet')
     axes[1, 1].axhline(y = 0, color = 'black', linestyle = '--', alpha = 0.5)
     axes[1, 1].set_title("Gap Entrenamiento-Validación (Overfitting)")
@@ -292,15 +360,15 @@ def plot_advanced_evaluation(pipeline_model, X_test, y_test, model_name = "Model
 
     print(f"\nGenerando dashboard para {model_name}...")
 
-    y_proba  =  pipeline_model.predict_proba(X_test)[:, 1]
-    y_pred  =  pipeline_model.predict(X_test)
+    y_proba = pipeline_model.predict_proba(X_test)[:, 1]
+    y_pred = pipeline_model.predict(X_test)
 
-    fpr, tpr, _  =  roc_curve(y_test, y_proba)
-    roc_auc_val  =  auc(fpr, tpr)
-    precision, recall, _  =  precision_recall_curve(y_test, y_proba)
-    pr_auc  =  auc(recall, precision)
-    cm  =  confusion_matrix(y_test, y_pred, normalize = "true")
-    prob_true, prob_pred  =  calibration_curve(y_test, y_proba, n_bins = 10)
+    fpr, tpr, _ = roc_curve(y_test, y_proba)
+    roc_auc_val = auc(fpr, tpr)
+    precision, recall, _ = precision_recall_curve(y_test, y_proba)
+    pr_auc = auc(recall, precision)
+    cm = confusion_matrix(y_test, y_pred, normalize = "true")
+    prob_true, prob_pred = calibration_curve(y_test, y_proba, n_bins = 10)
 
     print("\nMÉTRICAS PROBABILÍSTICAS (TEST)")
     print("-" * 40)
@@ -309,7 +377,7 @@ def plot_advanced_evaluation(pipeline_model, X_test, y_test, model_name = "Model
     print(f"Brier Score    : {brier_score_loss(y_test, y_proba):.4f}")
     print(f"Log Loss       : {log_loss(y_test, y_proba):.4f}")
 
-    fig, axes  =  plt.subplots(2, 2, figsize = (14, 12))
+    fig, axes = plt.subplots(2, 2, figsize = (14, 12))
 
     fig.suptitle(f'Dashboard Avanzado de Evaluación - {model_name}', fontsize = 16, y = 0.98)
 
@@ -367,21 +435,21 @@ def plot_advanced_evaluation(pipeline_model, X_test, y_test, model_name = "Model
 
 def evaluate_and_analyze(pipeline_model, X_train, y_train, X_test, y_test, model_name = "Model"):
 
-    print(f"\n{' = '*60}")
+    print(f"\n{'=' * 60}")
     print(f"EVALUACIÓN Y ANÁLISIS: {model_name.upper()}")
-    print(f"{' = '*60}")
+    print(f"{'=' * 60}")
 
-    cv_results  =  crossval_detailed_metrics(pipeline_model, X_train, y_train, cv = 5)
+    cv_results = crossval_detailed_metrics(pipeline_model, X_train, y_train, cv = 5)
     pipeline_model.fit(X_train, y_train)
 
-    y_test_pred  =  pipeline_model.predict(X_test)
-    test_f1_macro  =  f1_score(y_test, y_test_pred, average = "macro")
+    y_test_pred = pipeline_model.predict(X_test)
+    test_f1_macro = f1_score(y_test, y_test_pred, average = "macro")
     
     print(f"\n ===CLASSIFICATION REPORT SOBRE TEST===")
     print(classification_report(y_test, y_test_pred, target_names = ['No Pago (0)', 'Pago (1)']))
 
-    cv_f1_macro_mean  =  cv_results['f1_macro'].mean()
-    f1_diff  =  abs(test_f1_macro - cv_f1_macro_mean)
+    cv_f1_macro_mean = cv_results['f1_macro'].mean()
+    f1_diff = abs(test_f1_macro - cv_f1_macro_mean)
 
     print(f"ANÁLISIS DE ESTABILIDAD (F1-Macro):")
     print(f"• Rendimiento esperado (CV):   {cv_f1_macro_mean:.4f}")
@@ -425,9 +493,12 @@ def logistic_regression_tuning_smote(trial, X_train, y_train, cv = cv_strategy, 
 
     model = LogisticRegression(solver = solver, penalty = penalty, C = C, class_weight = class_weight, l1_ratio = l1_ratio)
     
-    pipeline = Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])
     
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # Árbol de Decisión
@@ -442,9 +513,12 @@ def decision_tree_tuning_smote(trial, X_train, y_train, cv = cv_strategy, metric
         random_state = 42, class_weight = trial.suggest_categorical("class_weight", ["balanced", None])
     )
 
-    pipeline  =  Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
-    
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # Random Forest
@@ -459,9 +533,12 @@ def random_forest_tuning_smote(trial, X_train, y_train, cv = cv_strategy, metric
         random_state = 42, n_jobs = -1, class_weight = trial.suggest_categorical("class_weight", ["balanced", None])
     )
 
-    pipeline = Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
-    
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # LightGBM
@@ -478,9 +555,12 @@ def lightGBM_tuning_smote(trial, X_train, y_train, cv = cv_strategy, metric = "f
         random_state = 42, n_jobs = 1, verbosity = -1
     )
 
-    pipeline = Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
-    
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])   
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # SVM (Máquina de Soporte Vectorial)
@@ -491,9 +571,12 @@ def svm_tuning_smote(trial, X_train, y_train, cv = cv_strategy, metric = "f1_mac
     gamma = trial.suggest_float('gamma', 1e-3, 1e-1, log = True)
     model = SVC(kernel = kernel, gamma = gamma, probability = True)
 
-    pipeline = Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
-    
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 # XGBoost
@@ -508,9 +591,12 @@ def xgboost_tuning_smote(trial, X_train, y_train, cv = cv_strategy, metric = "f1
         eval_metric = 'logloss', random_state = 42, n_jobs = 1
     )
 
-    pipeline = Pipeline(steps = [('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)), ('model', model)])
-    
-    return cross_val_score(pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
+    full_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', model)                                              
+    ])
+
+    return cross_val_score(full_pipeline, X_train, y_train, cv = cv, scoring = metric).mean()
 
 
 
@@ -559,25 +645,24 @@ def main():
     
     load_dotenv()
 
+    pth = Path(os.getenv("DATA_FOLDER"))
     ruta_guardado = Path(os.getenv("ARTIFACTS"))
     ruta_reporte = Path(os.getenv("REPORT"))
 
     os.makedirs(ruta_guardado, exist_ok = True)
     os.makedirs(ruta_reporte, exist_ok = True)
     
-    os.makedirs(ruta_reporte, exist_ok = True)
-    os.makedirs(ruta_guardado, exist_ok = True)
 
+    # --- 2. CARGAR DATOS ---
 
-    # --- 2. CARGAR Y DIVIDIR DATOS ---
+    print("Cargando datos y pipeline...")
 
-    pth = Path(os.getenv("DATA_FILE", "./data")) 
-    
-    print("Cargando datos...")
+    X = pd.read_csv(pth / "X_base.csv")
+    y = pd.read_csv(pth / "y_base.csv")["Pago_atiempo"]
 
-    df = pd.read_excel(pth / "BD_creditos_procesado.xlsx")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = TEST_SIZE, random_state = 42, stratify = y)
 
-    X_train, X_test, y_train, y_test = data_division(df, 0.2)
+    # Resultados Modelos
 
     resultados_modelos = {}
 
@@ -595,9 +680,9 @@ def main():
 
     for name, (objective, constructor) in modelos_no_smote.items():
 
-        print(f"\n{'-'*80}")
+        print(f"\n{'-' * 80}")
         print(f"Optimizating WITHOUT SMOTE {name} ...")
-        print(f"{'-'*80}")
+        print(f"{'-' * 80}")
 
         study = optuna.create_study(direction = 'maximize')
         study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials = 10)
@@ -605,11 +690,15 @@ def main():
         print(f"Mejor F1 de los trials SIN SMOTE: {round(study.best_value, 3)}")
         print(f"Hiperparámetros SIN SMOTE: {study.best_params}")
 
-        final_model = constructor(**study.best_params)
-        final_model.fit(X_train, y_train)
+        best_params = study.best_params.copy()
+        final_model_base = constructor(**best_params)
+        
+        final_pipeline_no_smote = SklearnPipeline(steps=[('preprocessor', pipeline_ml), ('model', final_model_base)])
+        
+        final_pipeline_no_smote.fit(X_train, y_train)
 
-        y_test_pred = final_model.predict(X_test)
-        test_f1_macro = f1_score(y_test, y_test_pred, average = "macro")
+        y_test_pred = final_pipeline_no_smote.predict(X_test)
+        test_f1_macro = f1_score(y_test, y_test_pred, average="macro")
 
         print(f"Test F1 macro SIN SMOTE: {round(test_f1_macro, 3)}")
 
@@ -626,9 +715,9 @@ def main():
     }
 
     for name, (objective, constructor) in modelos_smote.items():
-        print(f"\n\n{'*'*80}")
+        print(f"\n\n{'*' * 80}")
         print(f"INICIANDO OPTIMIZACIÓN Y EVALUACIÓN PARA: {name}")
-        print(f"{'*'*80}")
+        print(f"{'*' * 80}")
 
         study = optuna.create_study(direction = 'maximize')
         study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials = 20)  
@@ -640,10 +729,11 @@ def main():
             best_params['probability'] = True  
 
         best_base_model = constructor(**best_params)
-        final_pipeline = Pipeline(steps = [
-            ('smote', SMOTE(sampling_strategy = SMOTE_RATIO, random_state = 42)),
-            ('model', best_base_model)
-        ])
+
+        final_pipeline = ImblearnPipeline(steps = pasos_preprocesamiento + [
+        ('smote', SMOTE(sampling_strategy = 0.33, random_state = 42)),   
+        ('model', best_base_model)                                              
+])
 
         cv_detailed, test_f1 = evaluate_and_analyze(
             pipeline_model = final_pipeline,
@@ -688,9 +778,9 @@ def main():
 
         if nombre in resultados_modelos:
 
-            modelo_pipeline  =  resultados_modelos[nombre]['model']
-            nombre_archivo  =  f"{nombre.replace(' ', '_')}_final.pkl"
-            ruta_completa  =  os.path.join(ruta_guardado, nombre_archivo)
+            modelo_pipeline = resultados_modelos[nombre]['model']
+            nombre_archivo = f"{nombre.replace(' ', '_')}_final.pkl"
+            ruta_completa = os.path.join(ruta_guardado, nombre_archivo)
             
             with open(ruta_completa, 'wb') as archivo:
 

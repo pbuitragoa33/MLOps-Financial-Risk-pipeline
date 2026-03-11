@@ -17,6 +17,8 @@ Thumbs.db
 
 # pdf
 .pdf
+Reporte_EDA.pdf
 
-
+# Logs de producción
+logs_produccion.csv
 

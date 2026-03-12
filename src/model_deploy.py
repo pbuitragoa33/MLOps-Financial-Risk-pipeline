@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import csv 
+from datetime import datetime
 import uvicorn
 
 
@@ -34,6 +36,10 @@ load_dotenv()
 
 
 objetos_pth = Path(os.getenv("ARTIFACTS"))
+data_pth = Path(os.getenv("DATA_FOLDER"))
+
+data_pth.mkdir(parents = True, exist_ok = True)
+
 
 try: 
 
@@ -127,6 +133,43 @@ def predict(data: InputData):
         else:
 
             estado = "APROBADO: El cliente SÍ PAGARÁ"
+
+
+        # Bloque para guardar los datos para predecir y monitorear el drift
+
+        log_file = data_pth / "logs_produccion.csv"
+        
+        file_exists = log_file.is_file()
+
+        # Diccionario con los datos de entrada crudos
+
+        log_data = data.model_dump()
+        
+        # Añadir la marca de tiempo, la predicción y las probabilidades
+
+        log_data['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_data['prediccion_modelo'] = int(prediccion)
+        log_data['prob_impago'] = float(prob_impago)
+
+        # Guadar el csv en modo 'a' de append para que las predicciones y todo se agregen a final al archivo de logs
+        try:
+
+            with open(log_file, mode = 'a', newline = '', encoding = 'utf-8') as f:
+
+                writer = csv.DictWriter(f, fieldnames = log_data.keys())
+
+                if not file_exists:
+
+                    writer.writeheader()  
+
+                writer.writerow(log_data) 
+
+        except Exception as log_e:
+
+            print(f"Advertencia: No se pudo guardar el log - {log_e}")
+
+        
+        # Retronar la predicción
 
         return {
             "prediccion_clase": int(prediccion),

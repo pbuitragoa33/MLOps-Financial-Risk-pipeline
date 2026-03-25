@@ -1,0 +1,7 @@
+env_project/
+__pycache__/
+*.pyc
+
+data/
+notebooks/
+.git/

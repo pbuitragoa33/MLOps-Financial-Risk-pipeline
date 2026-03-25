@@ -18,7 +18,7 @@ from sklearn.metrics import (accuracy_score, precision_score,
     recall_score, f1_score, classification_report, 
     ConfusionMatrixDisplay
     )
-
+from cargar_datos import cargar_datos_scoring
 
 load_dotenv() 
 
@@ -212,9 +212,9 @@ def curvas_aprendizaje_model(estimator, X, y, scoring = "accuracy"):
 
 def entrenar_modelo_heuristico(path : str, target_column : str = "Pago_atiempo", test_size : float = 0.2, random_state : int = 42):
 
-    # Cargar el dataset
+    # Cargar el dataset con el modulo de carga de datos desde BigQuery
 
-    df = pd.read_excel(path)
+    df = cargar_datos_scoring()
 
     # Separar características y variable objetivo
 

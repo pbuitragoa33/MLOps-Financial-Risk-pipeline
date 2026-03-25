@@ -14,6 +14,7 @@ from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, FunctionTransformer
+from cargar_datos import cargar_datos_scoring
 
 
 # ----------------------------------------------------- Clases de Transformación -----------------------------------------------------
@@ -603,16 +604,16 @@ def main():
 
     load_dotenv()
 
-    # Ruta del archivo
+    # Ruta de los archivos
 
-    pth = Path(os.getenv("DATA_FOLDER"))
     pipeline_pickle = Path(os.getenv("ARTIFACTS"))
+    pth = Path(os.getenv("DATA_FOLDER"))
 
     pipeline_pickle.mkdir(parents = True, exist_ok = True)
 
     # Leer la base de datos
 
-    df = pd.read_excel(pth / "BD_creditos.xlsx")
+    df = cargar_datos_scoring()
 
     # Eliminar manualmente outliers
 

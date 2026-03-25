@@ -22,3 +22,7 @@ Reporte_EDA.pdf
 # Logs de producción
 logs_produccion.csv
 
+# Carpeta data
+data/
+
+

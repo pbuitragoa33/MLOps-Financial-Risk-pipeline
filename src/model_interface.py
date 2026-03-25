@@ -6,6 +6,7 @@
 # Librerías 
 
 import streamlit as st
+import os
 import requests
 
 
@@ -90,7 +91,7 @@ if evaluar:
 
         try:
 
-            response = requests.post("http://127.0.0.1:8000/predict", json = data)
+            response = requests.post(os.getenv("API_URL", "http://127.0.0.1:8000/predict"), json = data)
             
             if response.status_code == 200:
 

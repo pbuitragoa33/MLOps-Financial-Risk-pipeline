@@ -78,9 +78,7 @@ Financial_Risk_pipeline/
 	 |- model_monitoring.ipynb
 	 |- model_training_evaluation.py
 	 |- multimodel_deploy.py
-	 |- multimodel_interface.py
-	 |- data/
-			|- logs_produccion.csv
+	 |- multimodel_interface.py	
 ```
 
 ## 5. Qué hace cada archivo?
